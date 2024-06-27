@@ -5,7 +5,13 @@ import (
 	"encoding/base64"
 	"sync/atomic"
 
+	"github.com/projectdiscovery/fastdialer/fastdialer"
+	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/ratelimit"
+	"github.com/projectdiscovery/rawhttp"
+	"github.com/projectdiscovery/rdap"
+	"github.com/projectdiscovery/retryabledns"
+	"github.com/projectdiscovery/retryablehttp-go"
 	mapsutil "github.com/projectdiscovery/utils/maps"
 	stringsutil "github.com/projectdiscovery/utils/strings"
 
@@ -27,9 +33,12 @@ import (
 	"github.com/projectdiscovery/nuclei/v3/pkg/protocols/common/contextargs"
 	"github.com/projectdiscovery/nuclei/v3/pkg/protocols/common/hosterrorscache"
 	"github.com/projectdiscovery/nuclei/v3/pkg/protocols/common/interactsh"
+	"github.com/projectdiscovery/nuclei/v3/pkg/protocols/common/protocolstate"
 	"github.com/projectdiscovery/nuclei/v3/pkg/protocols/common/utils/excludematchers"
 	"github.com/projectdiscovery/nuclei/v3/pkg/protocols/common/variables"
+	"github.com/projectdiscovery/nuclei/v3/pkg/protocols/dns/dnsclientpool"
 	"github.com/projectdiscovery/nuclei/v3/pkg/protocols/headless/engine"
+	"github.com/projectdiscovery/nuclei/v3/pkg/protocols/http/httpclientpool"
 	"github.com/projectdiscovery/nuclei/v3/pkg/reporting"
 	"github.com/projectdiscovery/nuclei/v3/pkg/scan"
 	templateTypes "github.com/projectdiscovery/nuclei/v3/pkg/templates/types"
@@ -124,6 +133,81 @@ type ExecutorOptions struct {
 	// ExportReqURLPattern exports the request URL pattern
 	// in ResultEvent it contains the exact url pattern (ex: {{BaseURL}}/{{randstr}}/xyz) used in the request
 	ExportReqURLPattern bool
+	// shared dialers
+	Dialers *Dialers
+}
+
+type Dialers struct {
+	fastDialer    *fastdialer.Dialer
+	rdapClient    *rdap.Client
+	dnsClient     *retryabledns.Client
+	httpClient    *retryablehttp.Client
+	rawHttpClient *rawhttp.Client
+}
+
+func NewDialers(options *types.Options) (*Dialers, error) {
+	var dialers = &Dialers{}
+	var err error
+
+	// allocate once various standard clients
+	// - fastdialer
+	dialers.fastDialer, err = protocolstate.GetDialerFromOptions(options)
+	if err != nil {
+		return nil, err
+	}
+
+	// - rdap
+	dialers.rdapClient = &rdap.Client{}
+	if options.HasDebug() {
+		dialers.rdapClient.Verbose = func(text string) {
+			gologger.Debug().Msgf("rdap: %s", text)
+		}
+	}
+
+	// - dns
+	resolvers := dnsclientpool.GetResolversOrDefault(options)
+	dialers.dnsClient, err = retryabledns.New(resolvers, 1)
+	if err != nil {
+		return nil, err
+	}
+
+	// - standard http + raw http
+	dialers.httpClient, err = httpclientpool.Get(options, &httpclientpool.Configuration{})
+	if err != nil {
+		return nil, err
+	}
+	dialers.rawHttpClient = httpclientpool.GetRaw(options)
+
+	return dialers, nil
+}
+
+func (d *Dialers) Default() *fastdialer.Dialer {
+	return d.fastDialer
+}
+
+func (d *Dialers) Rdap() *rdap.Client {
+	return d.rdapClient
+}
+
+func (d *Dialers) Dns() *retryabledns.Client {
+	return d.dnsClient
+}
+
+func (d *Dialers) Http() *retryablehttp.Client {
+	return d.httpClient
+}
+
+func (d *Dialers) RawHttp() *rawhttp.Client {
+	return d.rawHttpClient
+}
+
+func (d *Dialers) Close() {
+	if d.fastDialer != nil {
+		d.fastDialer.Close()
+	}
+	if d.rdapClient.HTTP != nil {
+		d.rdapClient.HTTP.CloseIdleConnections()
+	}
 }
 
 // todo: centralizing components is not feasible with current clogged architecture

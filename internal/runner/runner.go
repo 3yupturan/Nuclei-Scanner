@@ -183,6 +183,7 @@ func New(options *types.Options) (*Runner, error) {
 	var httpclient *retryablehttp.Client
 	if options.ProxyInternal && types.ProxyURL != "" || types.ProxySocksURL != "" {
 		var err error
+		// we use an independent instance of retryablehttp for internal operations
 		httpclient, err = httpclientpool.Get(options, &httpclientpool.Configuration{})
 		if err != nil {
 			return nil, err
@@ -453,6 +454,11 @@ func (r *Runner) RunEnumeration() error {
 	fuzzFreqCache := frequency.New(frequency.DefaultMaxTrackCount, r.options.FuzzParamFrequency)
 	r.fuzzFrequencyCache = fuzzFreqCache
 
+	dialers, err := protocols.NewDialers(r.options)
+	if err != nil {
+		return errors.Wrap(err, "could not create dialers")
+	}
+
 	// Create the executor options which will be used throughout the execution
 	// stage by the nuclei engine modules.
 	executorOpts := protocols.ExecutorOptions{
@@ -472,6 +478,7 @@ func (r *Runner) RunEnumeration() error {
 		TemporaryDirectory:  r.tmpDir,
 		Parser:              r.parser,
 		FuzzParamsFrequency: fuzzFreqCache,
+		Dialers:             dialers,
 	}
 
 	if config.DefaultConfig.IsDebugArgEnabled(config.DebugExportURLPattern) {

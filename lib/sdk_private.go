@@ -108,7 +108,14 @@ func (e *NucleiEngine) init(ctx context.Context) error {
 		return err
 	}
 
+	var err error
+	e.dialers, err = protocols.NewDialers(e.opts)
+	if err != nil {
+		return errors.Wrap(err, "could not create dialers")
+	}
+
 	if e.opts.ProxyInternal && types.ProxyURL != "" || types.ProxySocksURL != "" {
+		// we use an independent instance of retryablehttp for internal operations
 		httpclient, err := httpclientpool.Get(e.opts, &httpclientpool.Configuration{})
 		if err != nil {
 			return err
@@ -127,7 +134,6 @@ func (e *NucleiEngine) init(ctx context.Context) error {
 	})
 
 	e.applyRequiredDefaults(ctx)
-	var err error
 
 	// setup progressbar
 	if e.enableStats {
@@ -171,6 +177,7 @@ func (e *NucleiEngine) init(ctx context.Context) error {
 		ResumeCfg:       types.NewResumeCfg(),
 		Browser:         e.browserInstance,
 		Parser:          e.parser,
+		Dialers:         e.dialers,
 	}
 	if len(e.opts.SecretsFile) > 0 {
 		authTmplStore, err := runner.GetAuthTmplStore(*e.opts, e.catalog, e.executerOpts)
