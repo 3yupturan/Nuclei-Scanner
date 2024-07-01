@@ -40,6 +40,7 @@ func createEphemeralObjects(ctx context.Context, base *NucleiEngine, opts *types
 		Colorizer:       aurora.NewAurora(true),
 		ResumeCfg:       types.NewResumeCfg(),
 		Parser:          base.parser,
+		TimeoutVariants: opts.BuildTimeoutVariants(),
 	}
 	if opts.RateLimitMinute > 0 {
 		opts.RateLimit = opts.RateLimitMinute

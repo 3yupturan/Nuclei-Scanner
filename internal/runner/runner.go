@@ -472,6 +472,7 @@ func (r *Runner) RunEnumeration() error {
 		TemporaryDirectory:  r.tmpDir,
 		Parser:              r.parser,
 		FuzzParamsFrequency: fuzzFreqCache,
+		TimeoutVariants:    r.options.BuildTimeoutVariants(),
 	}
 
 	if config.DefaultConfig.IsDebugArgEnabled(config.DebugExportURLPattern) {

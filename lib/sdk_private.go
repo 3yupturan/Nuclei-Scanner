@@ -171,6 +171,7 @@ func (e *NucleiEngine) init(ctx context.Context) error {
 		ResumeCfg:       types.NewResumeCfg(),
 		Browser:         e.browserInstance,
 		Parser:          e.parser,
+		TimeoutVariants: e.opts.BuildTimeoutVariants(),
 	}
 	if len(e.opts.SecretsFile) > 0 {
 		authTmplStore, err := runner.GetAuthTmplStore(*e.opts, e.catalog, e.executerOpts)
